@@ -217,6 +217,11 @@ app.all('*', async (c) => {
   const request = c.req.raw;
   const url = new URL(request.url);
 
+  // Inject gateway token if not present (CF Access strips query params during auth redirect)
+  if (c.env.MOLTBOT_GATEWAY_TOKEN && !url.searchParams.has('token')) {
+    url.searchParams.set('token', c.env.MOLTBOT_GATEWAY_TOKEN);
+  }
+
   console.log('[PROXY] Handling request:', url.pathname);
 
   // Check if gateway is already running
@@ -268,8 +273,9 @@ app.all('*', async (c) => {
     console.log('[WS] URL:', request.url);
     console.log('[WS] Search params:', url.search);
     
-    // Get WebSocket connection to the container
-    const containerResponse = await sandbox.wsConnect(request, MOLTBOT_PORT);
+    // Get WebSocket connection to the container (use modified URL with token)
+    const modifiedRequest = new Request(url.toString(), request);
+    const containerResponse = await sandbox.wsConnect(modifiedRequest, MOLTBOT_PORT);
     console.log('[WS] wsConnect response status:', containerResponse.status);
     
     // Get the container-side WebSocket
@@ -366,7 +372,8 @@ app.all('*', async (c) => {
   }
 
   console.log('[HTTP] Proxying:', url.pathname + url.search);
-  const httpResponse = await sandbox.containerFetch(request, MOLTBOT_PORT);
+  const modifiedRequest = new Request(url.toString(), request);
+  const httpResponse = await sandbox.containerFetch(modifiedRequest, MOLTBOT_PORT);
   console.log('[HTTP] Response status:', httpResponse.status);
   
   // Add debug header to verify worker handled the request
